@@ -1,37 +1,43 @@
-# Cria o entrypoint.sh diretamente
-RUN <<'BASH'
-#!/usr/bin/env bash
-set -euo pipefail
+# =============================
+# Dockerfile — Bridge (auto deps + auto path)
+# =============================
+FROM python:3.11-slim
 
-echo "[entry] pwd=$(pwd)"
-BRIDGE_DIR="${BRIDGE_DIR:-/app/Typebot-conecet/outro}"
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH="/app" \
+    PORT=8080
 
-if [ ! -f "$BRIDGE_DIR/app_bridge.py" ]; then
-  echo "[entry] Default BRIDGE_DIR não tem app_bridge.py. Buscando automaticamente…"
-  BRIDGE_DIR=$(python - <<'PY'
-import os, sys
-for root, dirs, files in os.walk('/app', topdown=True):
-    if 'app_bridge.py' in files:
-        print(root); sys.exit(0)
-print('')
-PY
-)
-  if [ -z "$BRIDGE_DIR" ]; then 
-    echo "❌ app_bridge.py não encontrado"
-    find /app -maxdepth 4 -name app_bridge.py -printf "→ %h/app_bridge.py\n" || true
-    exit 1
-  fi
-fi
+WORKDIR /app
 
-export BRIDGE_BOT_DIR="${BRIDGE_BOT_DIR:-$BRIDGE_DIR/bot_gesto}"
-echo "[entry] BRIDGE_DIR=$BRIDGE_DIR"
-echo "[entry] BRIDGE_BOT_DIR=$BRIDGE_BOT_DIR"
+# Sistema básico
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ make libpq-dev curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-ls -la "$BRIDGE_DIR" || true
-ls -la "$BRIDGE_BOT_DIR" || true
-
-exec gunicorn -k uvicorn.workers.UvicornWorker \
-  --chdir "$BRIDGE_DIR" -b 0.0.0.0:${PORT} app_bridge:app
-BASH
-
+# Copia projeto e o entrypoint
+COPY . /app
+COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
+
+# Instala dependências:
+# 1) /app/requirements.txt
+# 2) /app/Typebot-conecet/requirements.txt
+# 3) /app/Typebot-conecet/outro/requirements.txt
+# Se nenhum existir, instala um conjunto mínimo
+RUN bash -lc 'set -e; \
+found=0; \
+for f in "/app/requirements.txt" "/app/Typebot-conecet/requirements.txt" "/app/Typebot-conecet/outro/requirements.txt"; do \
+  if [ -f "$f" ]; then echo "[deps] Using $f"; pip install --no-cache-dir -r "$f"; found=1; break; fi; \
+done; \
+if [ "$found" = "0" ]; then \
+  echo "[deps] No requirements.txt found. Installing minimal set..."; \
+  pip install --no-cache-dir fastapi pydantic gunicorn uvicorn redis cryptography user-agents geoip2 requests SQLAlchemy psycopg2-binary prometheus_client python-dotenv aiogram; \
+fi'
+
+# Healthcheck (depende da sua rota /health no app)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
+
+EXPOSE 8080
+CMD ["/bin/bash","-lc","/app/entrypoint.sh"]
