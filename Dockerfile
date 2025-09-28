@@ -1,31 +1,23 @@
 # =============================
-# Dockerfile — Bridge + Bot (supervisord, auto-deps)
+# Dockerfile — Bridge + Bot (supervisord + diagnóstico)
 # =============================
 FROM python:3.11-slim
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH="/app" \
-    PORT=8080 \
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="/app" PORT=8080 \
     BRIDGE_BOT_DIR="/app/bot_gesto"
 
 WORKDIR /app
 
-# Sistema básico
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential gcc g++ make libpq-dev curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# Copia projeto
+# Projeto + scripts
 COPY . /app
+COPY run_bot.sh /app/run_bot.sh
+RUN chmod +x /app/run_bot.sh
 
-# Instala dependências:
-# tenta, em ordem:
-# 1) /app/requirements.txt
-# 2) /app/Typebot-conecet/requirements.txt
-# 3) /app/Typebot-conecet/outro/requirements.txt
-# 4) /app/bot_gesto/requirements.txt
-# fallback: instala um conjunto mínimo
+# Dependências (procura requirements em locais comuns; fallback instala mínimo)
 RUN bash -lc '\
 set -e; found=""; \
 for f in \
@@ -38,12 +30,11 @@ for f in \
 done; \
 if [ -z "$found" ]; then \
   echo "[deps] No requirements.txt found. Installing minimal set..."; \
-  pip install --no-cache-dir fastapi pydantic gunicorn uvicorn redis cryptography user-agents geoip2 requests SQLAlchemy psycopg2-binary prometheus_client python-dotenv aiogram; \
+  pip install --no-cache-dir fastapi pydantic gunicorn uvicorn redis cryptography user-agents geoip2 requests SQLAlchemy psycopg2-binary prometheus_client python-dotenv aiogram alembic; \
 fi; \
-pip install --no-cache-dir supervisor \
-'
+pip install --no-cache-dir supervisor'
 
-# Gera supervisord.conf (2 processos: bridge + bot)
+# supervisord: 2 processos (bridge + bot)
 RUN printf "%s\n" \
 "[supervisord]" \
 "nodaemon=true" \
@@ -63,8 +54,8 @@ RUN printf "%s\n" \
 "environment=PYTHONUNBUFFERED=\"1\",PYTHONDONTWRITEBYTECODE=\"1\",BRIDGE_BOT_DIR=\"/app/bot_gesto\"" \
 "" \
 "[program:bot]" \
-"directory=/app/bot_gesto" \
-"command=python -u bot.py" \
+"directory=/app" \
+"command=/bin/bash -lc /app/run_bot.sh" \
 "autostart=true" \
 "autorestart=true" \
 "startretries=3" \
@@ -74,7 +65,6 @@ RUN printf "%s\n" \
 "stderr_logfile_maxbytes=0" \
 > /app/supervisord.conf
 
-# Healthcheck (usa /health do bridge)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
   CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 
