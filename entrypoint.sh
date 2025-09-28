@@ -1,38 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[entry] pwd=$(pwd)"
+# Caminhos efetivos (conforme seus logs)
+APP_DIR="/app"
+BOT_DIR="/app/bot_gesto"
 
-# Caminho padrão (o seu):
-BRIDGE_DIR="${BRIDGE_DIR:-/app/Typebot-conecet/outro}"
+export BRIDGE_BOT_DIR="$BOT_DIR"
 
-# Se não achar, procura automaticamente pelo app_bridge.py
-if [ ! -f "$BRIDGE_DIR/app_bridge.py" ]; then
-  echo "[entry] Default BRIDGE_DIR não tem app_bridge.py. Buscando automaticamente…"
-  BRIDGE_DIR="$(python - <<'PY'
-import os, sys
-for root, dirs, files in os.walk('/app', topdown=True):
-    if 'app_bridge.py' in files:
-        print(root)
-        sys.exit(0)
-print('')
-PY
-)"
-  if [ -z "$BRIDGE_DIR" ]; then
-    echo "❌ app_bridge.py não encontrado sob /app"
-    find /app -maxdepth 4 -name app_bridge.py -printf '→ %h/app_bridge.py\n' || true
-    exit 1
-  fi
+echo "[entry] APP_DIR=$APP_DIR"
+echo "[entry] BRIDGE_BOT_DIR=$BRIDGE_BOT_DIR"
+ls -la "$APP_DIR" || true
+ls -la "$BOT_DIR" || true
+
+# 1) Sobe o bot (se existir)
+if [ -f "$BOT_DIR/bot.py" ]; then
+  echo "[entry] starting bot.py ..."
+  python -u "$BOT_DIR/bot.py" &
+else
+  echo "⚠️  $BOT_DIR/bot.py não encontrado; seguindo sem bot"
 fi
 
-# Pasta do bot (irmã de app_bridge.py)
-export BRIDGE_BOT_DIR="${BRIDGE_BOT_DIR:-$BRIDGE_DIR/bot_gesto}"
-
-echo "[entry] BRIDGE_DIR=$BRIDGE_DIR"
-echo "[entry] BRIDGE_BOT_DIR=$BRIDGE_BOT_DIR"
-
-ls -la "$BRIDGE_DIR" || true
-ls -la "$BRIDGE_BOT_DIR" || true
-
-# Sobe o Bridge (FastAPI) via Gunicorn/Uvicorn
-exec gunicorn -k uvicorn.workers.UvicornWorker --chdir "$BRIDGE_DIR" -b 0.0.0.0:${PORT:-8080} app_bridge:app
+# 2) Sobe o Bridge (app_bridge.py está em /app)
+echo "[entry] starting bridge on :${PORT:-8080} ..."
+exec gunicorn -k uvicorn.workers.UvicornWorker --chdir "$APP_DIR" -b 0.0.0.0:${PORT:-8080} app_bridge:app
