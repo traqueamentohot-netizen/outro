@@ -12,43 +12,43 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app" \
     GEOIP_PATH="/app/GeoLite2-City.mmdb"
 
-# Caminhos (com espaços) — case-sensitive dentro do container
-ENV BRIDGE_DIR="/app/typebot _conection/Typebot-conecet/outro"
+# Caminhos (case-sensitive) conforme você informou
+ENV BRIDGE_DIR="/app/bot_gestor/bot_gestora/bot_gestao/bot_gestor/typebot_conection/Typebot-conecet/outro"
 ENV BOT_DIR="${BRIDGE_DIR}/bot_gesto"
 ENV BRIDGE_BOT_DIR="${BOT_DIR}"
 ENV GEOIP_DB_PATH="${GEOIP_PATH}"
 
 WORKDIR /app
 
-# Sistema
+# ---- Sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential gcc g++ make libpq-dev curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# Dependências Python (um único requirements.txt na raiz)
+# ---- Dependências Python (um único requirements.txt na raiz)
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt \
  && pip install --no-cache-dir supervisor gunicorn uvicorn
 
-# Código
+# ---- Código
 COPY . /app
 
-# Valida cedo (falha build se caminho estiver errado)
+# ---- Validação precoce de caminhos (falha o build se algo não bater)
 RUN bash -lc 'test -f "${BRIDGE_DIR}/app_bridge.py" || (echo "❌ app_bridge.py não encontrado em: ${BRIDGE_DIR}" && ls -la "${BRIDGE_DIR}" || true && exit 1)' \
  && bash -lc 'test -d "${BOT_DIR}" || (echo "❌ Pasta do bot não encontrada em: ${BOT_DIR}" && ls -la "${BRIDGE_DIR}" || true && exit 1)'
 
-# GeoIP (opcional)
+# ---- GeoIP (opcional)
 RUN curl -fsSL -o "${GEOIP_PATH}" \
     "https://github.com/P3TERX/GeoLite.mmdb/releases/latest/download/GeoLite2-City.mmdb" \
  || echo "⚠️ GeoIP não baixado; seguindo sem GeoIP"
 
-# Healthcheck
+# ---- Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
   CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 
 EXPOSE 8080
 
-# supervisord.conf inline (2 processos: bridge + bot)
+# ---- supervisord.conf inline (2 processos: Bridge + Bot)
 RUN printf "%s\n" \
 "[supervisord]" \
 "nodaemon=true" \
