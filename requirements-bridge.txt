@@ -1,63 +1,16 @@
-# =============================
-# Framework Web (Bridge + Admin)
-# =============================
-fastapi==0.111.0           # Framework principal da API
-uvicorn[standard]==0.30.6  # Servidor ASGI otimizado (uvloop + httptools)
-
-# =============================
-# Redis / Cache / Fila
-# =============================
-redis==5.1.1               # Cliente Redis performático e moderno
-
-# =============================
-# Validação / Config
-# =============================
-pydantic==2.7.4            # Validação de dados (v2+) compatível com FastAPI
-python-dotenv==1.0.1       # Carregar variáveis de ambiente (.env)
-
-# =============================
-# HTTP Requests / Async
-# =============================
-aiohttp==3.8.6             # Compatível com aiogram 2.25.2 e geoip2
-httpx==0.27.0              # Cliente HTTP moderno (sync/async)
-
-# =============================
-# Segurança / Criptografia
-# =============================
-cryptography==43.0.1       # Criptografia (Fernet, TLS, hashing)
-python-jose==3.3.0         # JWT e assinaturas seguras (se necessário)
-
-# =============================
-# Observabilidade / Logs / Métricas
-# =============================
-prometheus-client==0.20.0  # Exposição de métricas (ex.: /metrics)
-structlog==24.4.0          # Logging estruturado (JSON, escala e debug)
-
-# =============================
-# Enriquecimento Avançado
-# =============================
-geoip2==4.8.0              # GeoIP2 Reader (cidade, país, ASN, lat/lon)
-maxminddb==2.6.2           # Driver nativo para arquivos .mmdb
-user-agents==2.2.0         # Parse de User-Agent (browser, OS, device)
-
-# =============================
-# Supervisor / Orquestração
-# =============================
-supervisor==4.2.5          # Gerenciador de processos (bot, bridge, admin, worker)
-
-# =============================
-# Banco de Dados (BotGestor)
-# =============================
-SQLAlchemy==2.0.32         # ORM moderno e performático
-alembic==1.13.2            # Migrações automáticas do banco
-psycopg2-binary==2.9.9     # Driver PostgreSQL (binário, produção)
-
-# =============================
-# Telegram Bot (BotGestor)
-# =============================
-aiogram==2.25.2            # Framework Telegram (compatível com aiohttp 3.8.x)
-
-# =============================
-# Tipagem / Compatibilidade
-# =============================
-typing-extensions==4.12.2  # Tipagem moderna (compat com Pydantic v2+)
+alembic>=1.13.0
+# (e mantenha as libs já listadas)
+fastapi>=0.111.0
+pydantic>=2.7.0
+gunicorn>=21.2.0
+uvicorn>=0.30.0
+redis>=5.0.0
+cryptography>=41.0.0
+user-agents>=2.2.0
+geoip2>=4.7.0
+requests>=2.32.0
+SQLAlchemy>=2.0.0
+psycopg2-binary>=2.9.9
+prometheus_client>=0.16.0
+python-dotenv>=1.0.0
+aiogram==3.*

@@ -1,1 +1,1 @@
-web: gunicorn -k uvicorn.workers.UvicornWorker --chdir bot_gestor/bot_gestora/bot_gestao/bot_gestor/typebot_conection/Typebot-conecet/outro -b 0.0.0.0:${PORT} app_bridge:app
+web: gunicorn -k uvicorn.workers.UvicornWorker --chdir outro -b 0.0.0.0:${PORT} app_bridge:app
