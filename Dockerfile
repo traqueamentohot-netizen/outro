@@ -1,65 +1,82 @@
 # =============================
 # Dockerfile — Bridge + BotGestor + GeoIP + supervisord
-# Base: Debian 12 (bookworm) com Python 3.11 via apt
 # =============================
-FROM debian:bookworm-slim
+FROM python:3.11-slim
 
-# -----------------------------
-# Variáveis globais
-# -----------------------------
+LABEL org.opencontainers.image.title="Typebot Bridge + BotGestor" \
+      org.opencontainers.image.description="Bridge FastAPI + Bot Gestor com supervisord e GeoIP"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080 \
-    PATH="/usr/local/bin:$PATH" \
-    GEOIP_PATH="/app/GeoLite2-City.mmdb" \
-    PYTHONPATH="/app"
+    PYTHONPATH="/app" \
+    GEOIP_PATH="/app/GeoLite2-City.mmdb"
+
+# Caminhos (com espaços) — case-sensitive dentro do container
+ENV BRIDGE_DIR="/app/typebot _conection/Typebot-conecet/outro"
+ENV BOT_DIR="${BRIDGE_DIR}/bot_gesto"
+ENV BRIDGE_BOT_DIR="${BOT_DIR}"
+ENV GEOIP_DB_PATH="${GEOIP_PATH}"
 
 WORKDIR /app
 
-# -----------------------------
-# 1) Sistema + Python 3.11 + build deps
-# -----------------------------
+# Sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-venv python3-dev python3-pip \
-    gcc g++ make libpq-dev \
-    curl unzip ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    build-essential gcc g++ make libpq-dev curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# -----------------------------
-# 2) Instalar dependências do Bridge
-# -----------------------------
-COPY requirements-bridge.txt ./requirements-bridge.txt
-RUN pip3 install --break-system-packages --no-cache-dir -r requirements-bridge.txt
+# Dependências Python (um único requirements.txt na raiz)
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt \
+ && pip install --no-cache-dir supervisor gunicorn uvicorn
 
-# -----------------------------
-# 3) Instalar dependências do BotGestor
-# -----------------------------
-COPY bot_gesto/requirements.txt ./requirements-bot.txt
-RUN pip3 install --break-system-packages --no-cache-dir -r requirements-bot.txt
+# Código
+COPY . /app
 
-# -----------------------------
-# 4) Supervisord (via pip)
-# -----------------------------
-RUN pip3 install --break-system-packages --no-cache-dir supervisor
+# Valida cedo (falha build se caminho estiver errado)
+RUN bash -lc 'test -f "${BRIDGE_DIR}/app_bridge.py" || (echo "❌ app_bridge.py não encontrado em: ${BRIDGE_DIR}" && ls -la "${BRIDGE_DIR}" || true && exit 1)' \
+ && bash -lc 'test -d "${BOT_DIR}" || (echo "❌ Pasta do bot não encontrada em: ${BOT_DIR}" && ls -la "${BRIDGE_DIR}" || true && exit 1)'
 
-# -----------------------------
-# 5) Copiar código
-# -----------------------------
-COPY . .
+# GeoIP (opcional)
+RUN curl -fsSL -o "${GEOIP_PATH}" \
+    "https://github.com/P3TERX/GeoLite.mmdb/releases/latest/download/GeoLite2-City.mmdb" \
+ || echo "⚠️ GeoIP não baixado; seguindo sem GeoIP"
 
-# -----------------------------
-# 6) Baixar GeoLite2 City (GeoIP) - direto, sem tar
-# -----------------------------
-RUN curl -L -o /app/GeoLite2-City.mmdb \
-    https://github.com/P3TERX/GeoLite.mmdb/releases/latest/download/GeoLite2-City.mmdb
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 
-# -----------------------------
-# 7) Expor portas
-# -----------------------------
 EXPOSE 8080
-EXPOSE 8000
 
-# -----------------------------
-# 8) Entrypoint
-# -----------------------------
+# supervisord.conf inline (2 processos: bridge + bot)
+RUN printf "%s\n" \
+"[supervisord]" \
+"nodaemon=true" \
+"logfile=/dev/null" \
+"pidfile=/tmp/supervisord.pid" \
+"" \
+"[program:bridge]" \
+"directory=%(ENV_BRIDGE_DIR)s" \
+"command=gunicorn -k uvicorn.workers.UvicornWorker -b 0.0.0.0:%(ENV_PORT)s app_bridge:app" \
+"autostart=true" \
+"autorestart=true" \
+"startretries=3" \
+"stdout_logfile=/dev/stdout" \
+"stdout_logfile_maxbytes=0" \
+"stderr_logfile=/dev/stderr" \
+"stderr_logfile_maxbytes=0" \
+"environment=PYTHONUNBUFFERED=\"1\",PYTHONDONTWRITEBYTECODE=\"1\",BRIDGE_BOT_DIR=\"%(ENV_BRIDGE_BOT_DIR)s\",GEOIP_DB_PATH=\"%(ENV_GEOIP_DB_PATH)s\"" \
+"" \
+"[program:bot]" \
+"directory=%(ENV_BOT_DIR)s" \
+"command=python -u bot.py" \
+"autostart=true" \
+"autorestart=true" \
+"startretries=3" \
+"stdout_logfile=/dev/stdout" \
+"stdout_logfile_maxbytes=0" \
+"stderr_logfile=/dev/stderr" \
+"stderr_logfile_maxbytes=0" \
+> /app/supervisord.conf
+
 CMD ["supervisord", "-c", "/app/supervisord.conf"]
